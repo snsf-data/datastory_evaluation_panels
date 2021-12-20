@@ -1,0 +1,452 @@
+---
+params: 
+  title: ""
+  publication_date: ""
+  doi: ""
+output: 
+  html_document:
+    anchor_sections: false
+    theme: null
+    highlight: null
+    mathjax: null
+    css: ["style.css", "https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700&display=swap"]
+    self_contained: true
+title: "`r params$title`"
+---
+
+
+```{r general-setup, include=FALSE}
+## This file contains the GERMAN version of the data story
+
+# Set general chunk options
+knitr::opts_chunk$set(echo = FALSE, fig.showtext = TRUE, fig.retina = 3, 
+                      fig.align = "center", warning = FALSE, message = FALSE)
+
+# Install pacman package if needed
+if (!require("pacman")) {
+  install.packages("pacman")
+  library(pacman)
+}
+
+# Install snf.datastory package if not available, otherwise load it
+if (!require("snf.datastory")) {
+  if (!require("devtools")) {
+    install.packages("devtools")
+    library(devtools)
+  }
+  install_github("snsf-data/snf.datastory")
+  library(snf.datastory)
+}
+
+# Load packages
+p_load(tidyverse,
+       lubridate,
+       scales, 
+       conflicted, 
+       jsonlite,
+       here, 
+       ggiraph)
+
+# Conflict preferences
+conflict_prefer("filter", "dplyr")
+conflict_prefer("get_datastory_theme", "snf.datastory")
+conflict_prefer("get_datastory_scheme", "snf.datastory")
+
+# Increase showtext package font resolution
+showtext_opts(dpi = 320)
+
+# Set the locale for date formatting (Windows)
+Sys.setlocale("LC_TIME", "German")
+
+# Create function to print number with local language-specific format 
+print_num <- function(x) snf.datastory::print_num(x, lang = "de")
+
+# Knitr hook for local formatting of printed numbers
+knitr::knit_hooks$set(
+  inline <- function(x) {
+    if (!is.numeric(x)) {
+      x
+    } else {
+      print_num(x)
+    }
+  }
+)
+
+# snf.plot::get_fancy_legend is not yet available in snf.datastory
+get_fancy_legend <- function (direction = "horizontal", reverse = FALSE, ncol = NULL, 
+  nrow = NULL, label_position = "right", title_position = "left", 
+  label_hjust = 1)  {
+  if (direction == "horizontal") {
+    keywidth <- 8
+    keyheight <- 2
+  }
+  else if (direction == "vertical") {
+    keywidth <- 2
+    keyheight <- 8
+  }
+  guide_legend(title.position = title_position, direction = direction, 
+    keywidth = unit(keywidth, units = "mm"), keyheight = unit(keyheight, 
+      units = "mm"), label.hjust = label_hjust, label.vjust = 0.2, 
+    title.vjust = 0, byrow = FALSE, label.position = label_position, 
+    reverse = reverse, ncol = ncol, nrow = nrow)
+}
+```
+
+```{r print-header-infos, results='asis'}
+# Add publication date to header
+cat(format(as_datetime(params$publication_date), "%d.%m.%Y"))
+
+# Create the CSV files if they don't exist
+if (!file.exists(here("data", "current_panel_composition_20211109.csv")) |
+    !file.exists(here("data", "hist_memberships_months_20211109.csv")))
+  source(here("data-gathering.R"))
+
+# Load the CSV files
+current_memberships <- 
+  read_csv(here("data", "current_panel_composition_20211109.csv"))
+current_memberships_sum_stats <- 
+  read_csv(here("data", "current_panel_composition_summarystats_20211109.csv"))
+hist_memberships_months <- 
+  read_csv(here("data", "hist_memberships_months_20211109.csv"))
+hist_memberships_numbers_gender <- 
+  read_csv(here("data", "hist_memberships_numbers_gender_20211109.csv"))
+```
+
+```{r story-specific-setup, include=FALSE}
+# Set story-specific variables etc. here
+
+## Calculate some figures to be used in the text
+
+# Get the number of active distinct evaluation panels
+number_of_panels <- current_memberships %>% 
+  distinct(EvaluationBodyId_anon) %>% 
+  nrow()
+
+# Unique members
+distinct_panelmembers <- current_memberships %>% 
+  distinct(PersonId_anon) %>% 
+  nrow() # 1'019 distinct persons
+
+# Members in multiple panels
+distinct_panelmembers_in_multiple_panels <- current_memberships %>%  
+  group_by(PersonId_anon) %>%  
+  summarise(multiple_panels = (n_distinct(EvaluationBodyId_anon) > 1)) %>% 
+  count(multiple_panels) %>% 
+  mutate(share = 100 * (n / sum(n))) %>% 
+  filter(multiple_panels == TRUE) %>% 
+  pull(share)
+
+# Average age (overall)
+mean_age_overall <- current_memberships_sum_stats$mean_age_overall
+
+# Average age (male)
+mean_age_male <- current_memberships_sum_stats$mean_age_male
+
+# Average age (female)
+mean_age_female <- current_memberships_sum_stats$mean_age_female
+
+# Female share at reporting day (unique persons)
+female_share_persons_reportingday <-
+  current_memberships_sum_stats$female_share_persons_reportingday
+
+# Female share at reporting day (memberships)
+female_share_panels_reportingday <- 
+  current_memberships_sum_stats$female_share_panels_reportingday
+
+# # Gender shares
+# distinct_panelmembers_gender <- current_memberships %>%
+#   distinct(PersonId_anon, Gender) %>%
+#   count(Gender) %>%
+#   mutate(perc = 100 * (n / sum(n)))
+# 
+# # Share of external members (not memberships)
+# share_external_members <- current_memberships %>%
+#   group_by(PersonId_anon) %>%
+#   # When this person has at least one role that is not "external member", it is
+#   # not an external member.
+#   summarise(is_internal = any(Function_En != "external member")) %>%
+#   ungroup() %>%
+#   count(is_internal) %>%
+#   mutate(perc = 100 * (n / sum(n)))
+```
+
+__Der  Nationale Forschungsrat des SNF entscheidet darüber, ob ein Gesuch gefördert wird oder nicht. Die  `r prettyNum(number_of_panels, big.mark = "'")` Evaluationsgremien bereiten seine Entscheide vor.  Jährlich beurteilen sie mehrere Tausend Gesuche.__
+
+Eine wichtige Aufgabe der Evaluationsgremien ist die Entlastung des Forschungsrats.  Um das Jahr 2010 herum nahm die Anzahl der Gesuche, die der SNF erhielt, massiv zu. Damit erhöhte sich auch die zeitliche Belastung für das aus 100 Forschenden bestehende Milizorgan, was zu einem Problem wurde. In einigen Förderinstrumenten arbeiteten zwar bereits Evaluationsgremien mit, dies reichte jedoch nicht aus. Deshalb schuf der SNF weitere solcher Gremien, bestehend aus Mitgliedern des Forschungsrats und weiteren Forschenden von Hochschulen.
+
+Neben der Entlastung des Forschungsrates bringen die Evaluationsgremien zusätzlichen Mehrwert: Die zur Verfügung stehende Expertise wird verstärkt und lässt sich an wechselnde Erfordernisse anpassen. Auch wird es durch die Beteiligung von weiteren Forschenden einfacher, Interessenkonflikte zu vermeiden.
+
+`r prettyNum(distinct_panelmembers, big.mark = "'")` Personen sind Mitte November 2021 Mitglied der `r prettyNum(number_of_panels, big.mark = "'")` Evaluationsgremien, `r round(current_memberships_sum_stats$distinct_panelmembers_gender_m_perc)` Prozent davon Männer,  `r round(current_memberships_sum_stats$distinct_panelmembers_gender_f_perc)` Prozent Frauen. `r round(current_memberships_sum_stats$share_external_members_external_perc)` Prozent kommen von ausserhalb des Forschungsrats. Der Altersschnitt beträgt `r mean_age_overall` Jahre, `r mean_age_male` Jahre bei den Männern und `r mean_age_female` Jahre bei den Frauen. `r round(distinct_panelmembers_in_multiple_panels)` Prozent gehören mehreren Evaluationsgremien an.
+
+<div class="plot-box">
+
+<div class="plot-title">Aktive Mitglieder und Mitgliedschaften</div>
+
+```{r plot-member-development, out.width="100%", fig.height=4}
+## Plot the development of # memberships and # members
+# Summarise distinct persons and memberships data on a monthly level
+memberships_numbers <- hist_memberships_months %>% 
+  group_by(date) %>% 
+  summarize(n_unique_members = n_distinct(PersonId_anon),
+            n_memberships = n_distinct(Person_EvaluationBodyId_anon))
+
+# Create the plot
+p_memb <- memberships_numbers %>% 
+  pivot_longer(c("n_unique_members", "n_memberships")) %>% 
+  mutate(
+    name = ifelse(name == "n_unique_members", "Individuelle Mitglieder", 
+                  "Mitgliedschaften"),
+    name = fct_relevel(name, c("Mitgliedschaften", "Individuelle Mitglieder"))
+  ) %>% 
+  filter(date >= ymd("2012-01-01"), 
+         date <= ymd("2021-06-30")) %>% 
+  ggplot(aes(x = date, y = value, color = name)) +
+  labs(x = NULL,  y = NULL) +
+  geom_line() +
+  # Hack to add a (nearly) invisible hover point for every data point, in 
+  # order to define a tooltip with ggiraph. Tooltips for geom_line_interactive
+  # support only one distinct tooltip for the whole line, therefore, we use
+  # geom_point here. 
+  geom_point_interactive(
+    aes(tooltip = paste0("<b>", format(date, "%B %Y"), "</b>\n", 
+                         prettyNum(value, big.mark = "'"), " ", 
+                         name)), size = 20, 
+    color = "white", 
+    alpha = 0.01) +
+  scale_color_manual(values = get_datastory_scheme(), 
+                     guide = get_fancy_legend()) +
+  scale_x_date(
+    limits = c(ymd("2012-01-01"), ymd("2021-06-30")),
+    date_breaks = "years", date_labels = "%Y") +
+  scale_y_continuous(limits = c(0, 1350), breaks = seq(0, 2000, 250)) + 
+  get_datastory_theme()
+
+# Create ggiraph object
+girafe(ggobj = p_memb, 
+       height_svg = 4, 
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F75858;stroke:#F75858;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Eine Person kann Mitglied mehrerer Evaluationgsgremien sein. <br/>
+Quelle: Interne SNF-Datenbank, Auszug <a href="https://github.com/snsf-data/datastory_evaluation_panels/tree/main/data" target="_blank">hier</a> verfügbar. Die in der Vergangenheit liegenden Werte weisen eine Unsicherheit auf, siehe Box "Daten und Methoden".
+</div>
+</div>
+
+<div class="info-box">
+
+### Auswahlverfahren am SNF
+
+Von Forschenden eingereichte Projekte evaluiert der SNF im sogenannten Peer-Review-Verfahren. Wenn ein Gesuch die formalen Voraussetzungen erfüllt, geht es bei den meisten Förderinstrumenten in einem ersten Schritt an fachlich geeignete externe Gutachtende, oft ins Ausland. Danach folgt die interne Evaluation: Sogenannte Referentinnen und Referenten beurteilen das Gesuch anhand der Gutachten und unterbreiten es dem zuständigen Evaluationsgremium zusammen mit einer Empfehlung. Das Gremium bewertet das Gesuch nach den wissenschaftlichen Kriterien des jeweiligen Instruments und erstellt ein Ranking. Das zuständige übergeordnete Fachgremium des Forschungsrats fällt dann einen provisorischen Entscheid, welche Projekte gefördert werden. Abschliessend entscheidet das Präsidium des Forschungsrats. 
+
+</div>
+
+```{r ch-or-aborad-shares-2012-2021}
+# Get the share of CH/abroad members of today
+ch_or_abroad_2021 <- current_memberships %>% 
+  filter(!is.na(Country), Country != "Unknown") %>% 
+  distinct(PersonId_anon, Country) %>%
+  mutate(abroad = Country != "Switzerland") %>% 
+  count(abroad) %>% 
+  mutate(perc = 100 * (n / sum(n)))
+
+# Get the share of CH/abroad members of January 2012
+ch_or_abroad_2012 <- hist_memberships_months %>% 
+  filter(!is.na(Country), Country != "Unknown", 
+         date == "2012-01-01") %>% 
+  distinct(PersonId_anon, Country) %>%
+  mutate(abroad = Country != "Switzerland") %>% 
+  count(abroad) %>% 
+  mutate(perc = 100 * (n / sum(n)))
+```
+
+
+### Mehr Internationalität
+
+Um die Evaluationsgremien auszubauen, lud der SNF vermehrt Forschende von ausserhalb der Schweiz zur Mitarbeit ein. Dies bringt neben der Entlastung auch den Vorteil, dass die Wahrscheinlichkeit von Interessenkonflikten nochmals kleiner wird. Heute sind `r ch_or_abroad_2021 %>% filter(abroad) %>% pull(n)` oder `r ch_or_abroad_2021 %>% filter(abroad) %>% pull(perc) %>% round()` Prozent der Gremienmitglieder im Ausland tätig. Zu Beginn des Jahres 2012 waren dies noch `r ch_or_abroad_2012 %>% filter(abroad) %>% pull(perc) %>% round()` Prozent, das entsprach damals nur `r ch_or_abroad_2012 %>% filter(abroad) %>% pull(n)` Mitgliedern.
+
+Dabei haben sich die Anteile der Länder über die Zeit verändert. Während der Anteil an US-amerikanischen Mitgliedern sich halbiert hat, stammen jetzt prozentual deutlich mehr Mitglieder aus Italien, Grossbritannien und den Niederlanden, als dies noch vor knapp 10 Jahren der Fall war. 
+
+<div class="plot-box">
+
+<div class="plot-title">Anteil der internationalen Gremienmitglieder</div>
+
+```{r plot-countryshare-development, out.width="100%", fig.height=5}
+# Create a mapping table of countries and their "group" (country name or 
+# "Other") to be published in the plot. Put countries with overall small 
+# occurrence into "Other".
+country_groups <- hist_memberships_months %>% 
+  filter(!is.na(Country), Country != "Unknown") %>% 
+  distinct(PersonId_anon, Country_De) %>% 
+  count(Country_De) %>% 
+  arrange(-n) %>% 
+  mutate(freq = n / sum(n), 
+         # Under 1% -> Other
+         country_group = ifelse(freq < 0.01, "Weitere", Country_De)) %>% 
+  select(-freq, -n)
+
+# Prepare the data for the area plot
+memberships_numbers_country <- hist_memberships_months %>% 
+  # Remove CH
+  filter(Country_De != "Schweiz") %>% 
+  # Get the country group, resp. the "Other"
+  left_join(country_groups, by = "Country_De") %>% 
+  # Remove entries where we don't know the country
+  filter(!is.na(country_group))
+
+# Now sumarize the data for the plot
+memberships_numbers_country <- memberships_numbers_country %>% 
+  group_by(date, country_group) %>% 
+  # Persons, not memberships
+  summarise(n_memberships = n(), 
+            n_unique_members = n_distinct(PersonId_anon)) %>% 
+  mutate(freq_unique = n_unique_members / sum(n_unique_members), 
+         date_year = year(date)) %>% 
+  ungroup() %>% 
+  # For the tooltip: Create one tooltip per country and year (and not per 
+  # country, year and month)
+  left_join(
+    memberships_numbers_country %>% 
+      mutate(date_year = year(date)) %>% 
+      group_by(date_year, country_group) %>% 
+      summarise(year_unique_members = n_distinct(PersonId_anon)) %>% 
+      mutate(freq_unique_year = year_unique_members / 
+               sum(year_unique_members)) %>% 
+      ungroup(), by = c("country_group" = "country_group", 
+                        "date_year" = "date_year"))
+
+# Color scheme for the plot
+colors <- c("#5298BD",  "#FBBE5E", "#71B294", "#9D90B9", "#CBE0EB", "#B2B1A7", 
+            "#FDDEAE", "#83D0F5", "#B8D8C9", "#CEC7DC", "#D8D8D3", "#DAF1FC")
+
+# Create the area plot
+p_country_shares <- memberships_numbers_country %>% 
+  ggplot(aes(x = date, y = freq_unique, fill = country_group)) + 
+  scale_x_date(limits = c(ymd("2012-01-01"), ymd("2022-01-01")), 
+               breaks = seq(ymd("2012-01-01"), ymd("2022-01-01"), "year"), 
+               date_labels = "%Y") + 
+  geom_area() + 
+  # Hack: geom_area_interactive() has visual corruption when providing dynamic
+  # tooltip, draw the corrupted area plot with nearly no visibility over the 
+  # visible geom_area() underneath.
+  geom_area_interactive(aes(tooltip = 
+                              paste0("<b>", country_group, 
+                                     "</b> (", date_year,
+                                     ")<br>",
+                                     year_unique_members , " ",
+                                     " members worked (",
+                                     round(freq_unique_year * 100),
+                                     "%)<br>in ", country_group, ".")), 
+                        alpha = 0.01) +
+  scale_fill_manual(values = colors, 
+                    guide = get_fancy_legend(direction = "vertical", ncol = 1, 
+                                             label_hjust = 0)) +
+  get_datastory_theme(legend_position = "right") + 
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  labs(x = NULL, y = NULL) 
+
+# Create ggiraph object
+girafe(ggobj = p_country_shares,
+       height_svg = 5,
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F75858;stroke:#F75858;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Quelle: Interne SNF-Datenbank, Auszug <a href="https://github.com/snsf-data/datastory_evaluation_panels/tree/main/data" target="_blank">hier</a> verfügbar. Die in der Vergangenheit liegenden Werte weisen eine Unsicherheit auf, siehe Box "Daten und Methoden".
+</div>
+</div>
+
+### Frauenanteil steigt nur langsam – Quote eingeführt
+
+Obwohl der Frauenanteil in den Gremien stetig gewachsen ist, liegt er mit  `r round(female_share_persons_reportingday)`Prozent immer noch deutlich unter demjenigen der Männer. Wenn man nicht die Personen, sondern die Mitgliedschaften zählt, zeigt sich das gleiche Bild: Frauen haben `r round(female_share_panels_reportingday)`Prozent der Mitgliedschaften  inne. Dies widerspiegelt ihre Untervertretung in wissenschaftlichen Leitungspositionen in der Schweiz. <a href="https://www.snf.ch/de/kjCKYzJgvuNWbsf2/news/news-210205-quoten-fuer-mehr-gleichstellung-in-der-forschung" target="_blank">Während die Frauenanteile auf Stufe Doktorat noch bei knapp 45 Prozent liegen, fallen sie mit zunehmender Karrierestufe kontinuierlich, bei den Schweizer Lehrstühlen sind nur noch 23 Prozent mit Professorinnen besetzt</a>. 
+
+<div class="plot-box">
+
+<div class="plot-title">Geschlechteranteil der Gremienmitglieder</div>
+
+```{r plot-gendershare-development, out.width="100%", fig.height=3}
+# Create the lineplot with the gender shares
+p_memberships_numbers_gender <- hist_memberships_numbers_gender %>%
+  mutate(Gender = ifelse(Gender == "f", "Frauen", "Männer")) %>% 
+  ggplot(aes(x = date, y = freq_unique, color = Gender)) +
+  geom_line() + 
+  # Hack to add a (nearly) invisible hover point for every data point, in 
+  # order to define a tooltip with ggiraph. Tooltips for geom_line_interactive
+  # support only one distinct tooltip for the whole line, therefore, we use
+  # geom_point here. 
+  geom_point_interactive(
+    aes(tooltip = paste0("<b>", format(date, "%B %Y"), "</b>\n", 
+                         prettyNum(round(freq_unique * 100), big.mark = "'"), 
+                         "% ", ifelse(Gender == "Frauen", "weibliche", "männliche"), 
+                         " (", n_unique_members, ") Mitglieder")), size = 20, 
+    color = "white", 
+    alpha = 0.01) +
+  scale_x_date(limits = c(ymd("2012-01-01"), "2021-08-31"), 
+               date_breaks = "years", date_labels = "%Y")  + 
+  scale_color_manual(values = get_datastory_scheme()) + 
+  labs(x = NULL, y = NULL) + 
+  scale_y_continuous(labels = percent_format(accuracy = 1), limits = c(0, 1)) +
+  get_datastory_theme()
+
+# Create ggiraph object
+girafe(ggobj = p_memberships_numbers_gender,
+       height_svg = 4,
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F75858;stroke:#F75858;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Quelle: Interne SNSF-Datenbank, Auszug <a href="https://github.com/snsf-data/datastory_evaluation_panels/tree/main/data" target="_blank">hier</a> verfügbar. Die in der Vergangenheit liegenden Werte weisen eine Unsicherheit auf, siehe Box "Daten und Methoden".
+</div>
+</div>
+
+
+Um diesem Ungleichgewicht entgegenzuwirken, hat das Präsidium des Forschungsrates Ende 2020 eine Frauenquote für die Evaluationsgremien beschlossen, die nach Ablauf einer Übergangsfrist bis spätestens 2026 erreicht werden muss. Für fachspezifische Gremien berücksichtigt die Quote den Frauenanteil im jeweiligen Forschungsfeld. 
+
+<div class="info-box">
+
+### Daten und Methoden
+
+Die in diesem Artikel verwendeten Daten stammen aus der internen SNF-Datenbank. Sie sind <a href="https://github.com/snsf-data/datastory_evaluation_panels/tree/main/data" target="_blank">auf Github</a> erhältlich. 
+
+* Bei der Ermittlung der in der Vergangenheit liegenden Zahlen gibt es Datenqualitätsprobleme. In einigen Fällen bestehen  keine klare Angaben über den Beginn oder das Ende einer Mitgliedschaft in einem Gremium. In solchen Fällen haben wir die durchschnittliche Zeitdauer eingesetzt. In wenigen Fällen sind weder Beginn noch Ende der Mitgliedschaft im Datensatz vorhanden. Diese Fälle werden nicht mitgezählt.
+
+* Um ein Gremienmitglied einem Land zuzuordnen, haben wir uns auf das Land des zugehörigen Instituts abgestützt. Wenn dieses nicht bekannt war, haben wir die Endung der Mailadresse für die Zuordnung benutzt. 
+
+* Die Mitglieder der ehemaligen SNF-Forschungskommissionen an den Hochschulen werden nicht mitgezählt.
+
+* Analysezeitpunkt: 9. November 2021.
+
+
+
+</div>
+
+Detaillierte Informationen zu den momentanen Gremienmitgliedern finden Sie auf der Seite <a href="https://www.snf.ch/de/Kh7DZxlDCAXUljIZ/seite/ueberuns/organisation/forschungsrat-und-evaluationsgremien/mitglieder-der-evaluationsgremien" target="_blank">Mitglieder der Evaluationsgremien</a>.
+
+Daten, Text und Code dieser Datengeschichte sind <a href="https://github.com/snsf-data/datastory_evaluation_panels" target="_blank">auf Github verfügbar</a> und <a href="https://doi.org/10.46446/datastory.central-role-of-evaluation-panels" target="_blank">auf Zenodo archiviert</a>. DOI: 10.46446/datastory.central-role-of-evaluation-panels
