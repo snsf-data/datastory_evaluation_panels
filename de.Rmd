@@ -343,9 +343,9 @@ p_country_shares <- memberships_numbers_country %>%
                                      "</b> (", date_year,
                                      ")<br>",
                                      year_unique_members , " ",
-                                     " members worked (",
+                                     " Mitglieder arbeiteten hier (",
                                      round(freq_unique_year * 100),
-                                     "%)<br>in ", country_group, ".")), 
+                                     "%).")), 
                         alpha = 0.01) +
   scale_fill_manual(values = colors, 
                     guide = get_fancy_legend(direction = "vertical", ncol = 1, 
@@ -395,8 +395,8 @@ p_memberships_numbers_gender <- hist_memberships_numbers_gender %>%
   geom_point_interactive(
     aes(tooltip = paste0("<b>", format(date, "%B %Y"), "</b>\n", 
                          prettyNum(round(freq_unique * 100), big.mark = "'"), 
-                         "% ", ifelse(Gender == "Frauen", "weibliche", "männliche"), 
-                         " (", n_unique_members, ") Mitglieder")), size = 20, 
+                         "% ", ifelse(Gender == "Frauen", "Frauen", "Männer"), 
+                         " (", n_unique_members, ")")), size = 20, 
     color = "white", 
     alpha = 0.01) +
   scale_x_date(limits = c(ymd("2012-01-01"), "2021-08-31"), 

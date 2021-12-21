@@ -4,7 +4,6 @@
 # The following list of files should be ignored when interacting with Bitbucket.
 # The are mostly related to R, RStudio and Rprojects.
 
-output/
 en.html
 de.html
 fr.html
