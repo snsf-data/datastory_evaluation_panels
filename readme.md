@@ -2,8 +2,8 @@
 
 The SNSF’s National Research Council decides whether or not to fund applications. The 89 evaluation panels handle the preparatory work on which it bases its decisions, assessing several thousand applications each year.
 
-[English](https://data.snf.chstories/key-role-of-evaluation-panels-en.html)
-[German](https://data.snf.ch/stories/zentrale-rolle-der-evaluationsgremien-de.html)
+[English](https://data.snf.chstories/key-role-of-evaluation-panels-en.html)<br>
+[German](https://data.snf.ch/stories/zentrale-rolle-der-evaluationsgremien-de.html)<br>
 [French](https://data.snf.ch/stories/panels-au-coeur-des-procedures-de-selection-fr.html)
 
 Author(s): Julius Mattern
